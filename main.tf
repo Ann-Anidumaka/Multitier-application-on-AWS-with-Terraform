@@ -60,20 +60,25 @@ resource "aws_route_table_association" "public_subnet_asso" {
 
 resource "aws_launch_template" "web_server_template" {
   name_prefix             = "webServer"
-  image_id                = "ami-lt-0e223c5f0f93004fa" // Replace with your desired AMI
+  image_id                = "ami-07caf09b362be10b8" // Replace with your desired AMI
   instance_type           = "t2.micro"
-  key_name                = var.key_pair_name // Specify your key pair name here
+  key_name                = "web-server" // Specify your key pair name here
   security_group_names    = [aws_security_group.web_server_sg.name]
 
   user_data = <<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y httpd
-              systemctl start httpd
-              systemctl enable httpd
-              echo "<html><body><h1>Hello World!</h1></body></html>" > /var/www/html/index.html
-              EOF
+  #!/bin/bash
+  echo "*** Installing apache2"
+  sudo apt update -y
+  sudo apt install apache2 -y
+  echo "*** Completed Installing apache2"
+  EOF
+
+tags = {
+    Name = "webser_instance"
+  }
+
 }
+
 
 resource "aws_security_group" "web_server_sg" {
   name        = "web-server-sg"
