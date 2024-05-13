@@ -1,6 +1,11 @@
 # VPC creation 
 resource "aws_vpc" "web_main" {
   cidr_block = "10.0.0.0/16"
+
+  tags = {
+    Name = "web-mainvpc"
+    # Add other tags as needed
+  }
 }
 
 resource "aws_subnet" "public_subnets" {
