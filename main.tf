@@ -75,10 +75,25 @@ resource "aws_launch_template" "web_server_template" {
 
 tags = {
     Name = "webser_instance"
+
+    
   }
 
 }
 
+#ASG
+resource "aws_autoscaling_group" "autoscale" {
+  name                  = "test-autoscaling-group"  
+  desired_capacity      = 2
+  max_size              = 5
+  min_size              = 2
+  health_check_type     = "EC2"
+  vpc_zone_identifier   = [aws_subnet.public_subnets[*].id]  # Use public subnets
+  launch_template {
+    id      = aws_launch_template.web_server_template.id
+    version = "$Latest"
+  }
+}
 
 resource "aws_security_group" "web_server_sg" {
   name        = "web-server-sg"
@@ -113,3 +128,39 @@ resource "aws_security_group" "web_server_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+resource "aws_lb" "test" {
+  name               = "test-lb-tf"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_server_sg.id]
+  subnets            = aws_subnet.public_subnets[*].id
+
+  enable_deletion_protection = true
+
+    tags = {
+    Name = "webServer-alb"
+  }
+}
+
+
+
+
+ resource "aws_lb_listener" "my_alb_listener" {
+ load_balancer_arn = aws_lb.test.arn
+ port              = "80"
+ protocol          = "HTTP"
+
+ default_action {
+   type             = "forward"
+   target_group_arn = aws_lb_target_group.web_tg.arn
+ }
+}
+
+resource "aws_lb_target_group" "web_tg" { // Target Group A
+ name     = "target-group"
+ port     = 80
+ protocol = "HTTP"
+ vpc_id   = aws_vpc.web_main.id
+}
+
