@@ -71,7 +71,7 @@ resource "aws_launch_template" "web_server_template" {
   sudo apt update -y
   sudo apt install apache2 -y
   echo "*** Completed Installing apache2"
-  EOF
+EOF
 
 tags = {
     Name = "webser_instance"
@@ -83,17 +83,22 @@ tags = {
 
 #ASG
 resource "aws_autoscaling_group" "autoscale" {
-  name                  = "test-autoscaling-group"  
+  name                  = "test-autoscaling-group"
   desired_capacity      = 2
   max_size              = 5
   min_size              = 2
   health_check_type     = "EC2"
-  vpc_zone_identifier   = [aws_subnet.public_subnets[*].id]  # Use public subnets
+  vpc_zone_identifier   = [
+    aws_subnet.public_subnets[0].id,
+    aws_subnet.public_subnets[1].id
+  ]
+
   launch_template {
     id      = aws_launch_template.web_server_template.id
-    version = "$Latest"
+    version = "$Latest"  # Assuming you're using the latest version
   }
 }
+
 
 resource "aws_security_group" "web_server_sg" {
   name        = "web-server-sg"
