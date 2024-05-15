@@ -65,7 +65,7 @@ resource "aws_launch_template" "web_server_template" {
   key_name                = "web-server" // Specify your key pair name here
   security_group_names    = [aws_security_group.web_server_sg.name]
 
-  user_data = "${file("apache-install.sh")}"
+  user_data = filebase64("apache-install.sh")
 
 tags = {
     Name = "webser_instance"
