@@ -130,25 +130,6 @@ tags = {
 
 }
 
-#ASG
-resource "aws_autoscaling_group" "autoscale" {
-  name                  = "test-autoscaling-group"
-  desired_capacity      = 2
-  max_size              = 5
-  min_size              = 2
-  health_check_type     = "EC2"
-  vpc_zone_identifier   = [
-    aws_subnet.public_subnets[0].id,
-    aws_subnet.public_subnets[1].id
-  ]
-
-  target_group_arns = [aws_lb_target_group.web_tg.arn]
-
-  launch_template {
-    id      = aws_launch_template.web_server_template.id
-    version = "$Latest"  # Assuming you're using the latest version
-  }
-}
 
 
 resource "aws_security_group" "web_server_sg" {
@@ -182,6 +163,26 @@ resource "aws_security_group" "web_server_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+#ASG
+resource "aws_autoscaling_group" "autoscale" {
+  name                  = "test-autoscaling-group"
+  desired_capacity      = 2
+  max_size              = 5
+  min_size              = 2
+  health_check_type     = "EC2"
+  vpc_zone_identifier   = [
+    aws_subnet.public_subnets[0].id,
+    aws_subnet.public_subnets[1].id
+  ]
+
+  target_group_arns = [aws_lb_target_group.web_tg.arn]
+
+  launch_template {
+    id      = aws_launch_template.web_server_template.id
+    version = "$Latest"  # Assuming you're using the latest version
   }
 }
 
@@ -220,3 +221,66 @@ resource "aws_lb_target_group" "web_tg" { // Target Group A
  vpc_id   = aws_vpc.web_main.id
 }
 
+
+#Application Tier
+resource "aws_launch_template" "webapp_appserver_template" {
+  name_prefix             = "webapp-appServer"
+  image_id                = "ami-0bb84b8ffd87024d8" // Replace with your desired AMI
+  instance_type           = "t2.micro"
+  key_name                = "web-server" // Specify your key pair name here
+  vpc_security_group_ids  = [aws_security_group.web_server_sg.id]
+
+  user_data = filebase64("mysql.sh")
+  
+
+tags = {
+    Name = "webapp-appser_instance"
+
+    
+  }
+  
+
+}
+
+resource "aws_security_group" "webapp_webserver_sg" {
+  name        = "webapp-appserver-sg"
+  description = "Security group for webapp appserver"
+
+  vpc_id      = aws_vpc.web_main.id 
+   ingress {
+    from_port = -1
+    to_port   = -1
+    protocol  = "icmp"
+    security_groups = [aws_security_group.web_server_sg.id] 
+
+  }
+
+}
+
+#Application tier target group
+resource "aws_lb_target_group" "webapp_appserver_tg" { // Target Group B
+ name     = "webapp-appserver-target-group"
+ port     = 80
+ protocol = "HTTP"
+ vpc_id   = aws_vpc.web_main.id
+}
+
+#ASG for application tier
+resource "aws_autoscaling_group" "app-autoscale" {
+  name                  = "app-test-autoscaling-group"
+  desired_capacity      = 2
+  max_size              = 4
+  min_size              = 2
+  health_check_type     = "EC2"
+  vpc_zone_identifier   = [
+    aws_subnet.private_subnets[0].id,
+    aws_subnet.private_subnets[1].id
+  ]
+
+  target_group_arns = [aws_lb_target_group.webapp_appserver_tg.arn]
+
+  launch_template {
+    id      = aws_launch_template.webapp_appserver_template.id
+    version = "$Latest"  # Assuming you're using the latest version
+  }
+}
