@@ -145,6 +145,13 @@ resource "aws_security_group" "web_server_sg" {
   }
 
   ingress {
+    from_port = -1
+    to_port   = -1
+    protocol  = "icmp"
+    cidr_blocks = ["0.0.0.0/0"]
+
+  }
+  ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -158,6 +165,14 @@ resource "aws_security_group" "web_server_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+ #Ingress rule to allow MySQL traffic from the database security group
+  ingress {
+    from_port        = 3306
+    to_port          = 3306
+    protocol         = "tcp"
+    security_groups  = [aws_security_group.webapp_db.id]  
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -169,9 +184,9 @@ resource "aws_security_group" "web_server_sg" {
 #ASG
 resource "aws_autoscaling_group" "autoscale" {
   name                  = "test-autoscaling-group"
-  desired_capacity      = 2
-  max_size              = 5
-  min_size              = 2
+  desired_capacity      = 1
+  max_size              = 3
+  min_size              = 1
   health_check_type     = "EC2"
   vpc_zone_identifier   = [
     aws_subnet.public_subnets[0].id,
@@ -242,17 +257,40 @@ tags = {
 
 }
 
+#application tier security group
 resource "aws_security_group" "webapp_webserver_sg" {
   name        = "webapp-appserver-sg"
   description = "Security group for webapp appserver"
 
   vpc_id      = aws_vpc.web_main.id 
+
+   ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    security_groups = [aws_security_group.webapp_bastion_sg.id]   #Allow SSH from bastion host server security group
+  }
+
    ingress {
     from_port = -1
     to_port   = -1
     protocol  = "icmp"
     security_groups = [aws_security_group.web_server_sg.id] 
 
+  }
+
+    ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
 }
@@ -268,9 +306,9 @@ resource "aws_lb_target_group" "webapp_appserver_tg" { // Target Group B
 #ASG for application tier
 resource "aws_autoscaling_group" "app-autoscale" {
   name                  = "app-test-autoscaling-group"
-  desired_capacity      = 2
-  max_size              = 4
-  min_size              = 2
+  desired_capacity      = 1
+  max_size              = 2
+  min_size              = 1
   health_check_type     = "EC2"
   vpc_zone_identifier   = [
     aws_subnet.private_subnets[0].id,
@@ -283,4 +321,83 @@ resource "aws_autoscaling_group" "app-autoscale" {
     id      = aws_launch_template.webapp_appserver_template.id
     version = "$Latest"  # Assuming you're using the latest version
   }
+}
+
+#Bastion Host
+resource "aws_instance" "bastion" {
+  ami           = "ami-04e914639d0cca79a"
+  instance_type = "t2.micro"
+
+  tags = {
+    Name = "webappbastionhost"
+  }
+}
+
+#bastion security group
+resource "aws_security_group" "webapp_bastion" {
+  name        = "webapp-bastion-sg"
+  description = "Security group for webapp bastion host"
+
+  vpc_id      = aws_vpc.web_main.id 
+   
+   ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks =  [aws_bastion_host.ip_address]
+  }#Allow SSH from Ip address
+  
+}
+
+#database tier security group
+resource "aws_security_group" "webapp_db" {
+  name        = "webapp-db-sg"
+  description = "Security group for webapp db tier"
+
+  vpc_id      = aws_vpc.web_main.id 
+   
+   ingress {
+    from_port   = 3306
+    to_port     = 3306
+    protocol    = "tcp"
+    security_groups = [aws_security_group.webapp_appserver.id] #Allow incomig traffic from the application server on the db port 
+  }
+
+   egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    security_groups = [aws_security_group.webapp_appserver.id] #Allow outgoing traffic from the application server on the db port 
+  }
+  
+}
+
+#Database subnet
+
+resource "aws_db_subnet_group" "webapp_db_subnet_group" {
+  name = "webapp-db-subnet-group"
+  subnet_ids = [ aws_subnet.private_subnets[0].id,
+    aws_subnet.private_subnets[1].id]
+
+  tags = {
+    Name = "Webapp DB Subnet Group"
+  }
+}
+
+
+#Database Instance
+resource "aws_db_instance" "webapp" {
+  allocated_storage = 10
+  storage_type = "gp2"
+  engine = "mysql"
+  engine_version = "5.7"
+  instance_class = "db.t2.micro"
+  identifier = "mywebappdb"
+  username = "dbuser"
+  password = "dbpassword"
+
+  vpc_id  =  aws_vpc.web_main.id
+  db_subnet_group_name = aws_db_subnet_group.webapp_db_subnet_group.id
+
+  skip_final_snapshot = true
 }
